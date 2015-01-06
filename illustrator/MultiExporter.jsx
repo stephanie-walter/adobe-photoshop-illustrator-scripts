@@ -1,21 +1,24 @@
-﻿
-// MultiExporter.js
+// MultiExporter.jsx
 // Version 0.1
 // Version 0.2 Adds PNG and EPS exports
 // Version 0.3 Adds support for exporting at different resolutions
 // Version 0.4 Adds support for SVG, changed EPS behaviour to minimise output filesize
 // Version 0.5 Fixed cropping issues
-// Version 2.0 Incorporates all of Tom Byrne's terrific additions
+// Version 0.6 Added inner padding mode to prevent circular bounds clipping
 //
-// Exports Illustrator artboards and/or layers as individual PNG or PDF files
+// Copyright 2013 Tom Byrne
+// Comments or suggestions to tom@tbyrne.org
 // 
-// Copyright 2011-13 Matthew Ericson and Tom Byrne
-// Comments or suggestions to mericson@ericson.net
+// Copyright 2011 Matthew Ericson http://www.tbyrne.org/export-illustrator-layers-to-svg-files
 
 
 var docRef = app.activeDocument;	
 
 
+
+
+
+	
 // Format specific functionality
 getPng8Options = function ( transparency, scaling, embedImage, embedFont, trimEdges ) {
 	var options = new ExportOptionsPNG8();
@@ -61,7 +64,6 @@ getEpsOptions = function ( transparency, scaling, embedImage, embedFont, trimEdg
 getSvgOptions = function ( transparency, scaling, embedImage, embedFont, trimEdges ) {
 	options = new ExportOptionsSVG();
 	options.embedRasterImages = embedImage;
-	options.saveMultipleArtboards = true;
 	return options;
 }
 getFxg1Options = function ( transparency, scaling, embedImage, embedFont, trimEdges ) {
@@ -124,6 +126,7 @@ var multi_exporter = {
 	embedImage:   true,
 	embedFont:   true,
 	trimEdges:   true,
+	innerPadding:   false,
 	ignoreWarnings:   false,
 	
 	format:		 "PNG 24",
@@ -143,14 +146,13 @@ var multi_exporter = {
 	export_artboards: null, 
 	export_layers: null, 
 	whole_artboard_mode: false, 
-  
 
 	formatList:null,
 	artboardList:null,
 	progLabel:null,
 
 	// these are controls that are format dependant
-	controlNames:["scalingInput","transCheckBox","embedImageCheckBox","embedFontCheckBox","trimEdgesCheckBox","skipDefaultNames"],
+	controlNames:["scalingInput","transCheckBox","embedImageCheckBox","embedFontCheckBox","trimEdgesCheckBox","innerPaddingCheckBox"],
 	scalingInput:null,
 	transCheckBox:null,
 	embedImageCheckBox:null,
@@ -158,26 +160,24 @@ var multi_exporter = {
 	trimEdgesCheckBox:null,
 	ignoreCheckBox:null,
 	exportArtboardsCheckBox:null,
-    skipDefaultNames:null,
-
 
 	// copyBehaviour - for vector outputs the output must be done from a copy of the document (to avoid hidden layers being included in output)
-	formatInfo: [   {name:"PNG 8", copyBehaviour:false, getOptions:getPng8Options, saveFile:savePng8, activeControls:["scalingInput","transCheckBox","trimEdgesCheckBox","skipDefaultNamesCheckBox"]},
-					{name:"PNG 24", copyBehaviour:false, getOptions:getPng24Options, saveFile:savePng24, activeControls:["scalingInput","transCheckBox","trimEdgesCheckBox","skipDefaultNamesCheckBox"]},
-					{name:"PDF", copyBehaviour:false, getOptions:getPdfOptions, saveFile:savePdf, activeControls:["trimEdgesCheckBox","skipDefaultNamesCheckBox"]},
-					{name:"JPG", copyBehaviour:false, getOptions:getJpgOptions, saveFile:saveJpg, activeControls:["scalingInput","trimEdgesCheckBox","skipDefaultNamesCheckBox"]},
-					{name:"EPS", copyBehaviour:true, getOptions:getEpsOptions, saveFile:saveEps, activeControls:["embedImageCheckBox","embedFontCheckBox","trimEdgesCheckBox","skipDefaultNamesCheckBox"]},
-					{name:"SVG", copyBehaviour:true, getOptions:getSvgOptions, saveFile:saveSvg, activeControls:["embedImageCheckBox","trimEdgesCheckBox","skipDefaultNamesCheckBox"]},
-					{name:"FXG 1.0", copyBehaviour:true, getOptions:getFxg1Options, saveFile:saveFxg, activeControls:["trimEdgesCheckBox","skipDefaultNamesCheckBox"]},
-					{name:"FXG 2.0", copyBehaviour:true, getOptions:getFxg2Options, saveFile:saveFxg, activeControls:["trimEdgesCheckBox","skipDefaultNamesCheckBox"]}],
+	formatInfo: [   {name:"PNG 8", copyBehaviour:false, pixelDocSize:true, getOptions:getPng8Options, saveFile:savePng8, activeControls:["scalingInput","transCheckBox","trimEdgesCheckBox","innerPaddingCheckBox"]},
+					{name:"PNG 24", copyBehaviour:false, pixelDocSize:true, getOptions:getPng24Options, saveFile:savePng24, activeControls:["scalingInput","transCheckBox","trimEdgesCheckBox","innerPaddingCheckBox"]},
+					{name:"PDF", copyBehaviour:false, pixelDocSize:false, getOptions:getPdfOptions, saveFile:savePdf, activeControls:["trimEdgesCheckBox"]},
+					{name:"JPG", copyBehaviour:false, pixelDocSize:true, getOptions:getJpgOptions, saveFile:saveJpg, activeControls:["scalingInput","trimEdgesCheckBox","innerPaddingCheckBox"]},
+					{name:"EPS", copyBehaviour:true, pixelDocSize:false, getOptions:getEpsOptions, saveFile:saveEps, activeControls:["embedImageCheckBox","embedFontCheckBox","trimEdgesCheckBox"]},
+					{name:"SVG", copyBehaviour:true, pixelDocSize:false, getOptions:getSvgOptions, saveFile:saveSvg, activeControls:["embedImageCheckBox","trimEdgesCheckBox"]},
+					{name:"FXG 1.0", copyBehaviour:true, pixelDocSize:false, getOptions:getFxg1Options, saveFile:saveFxg, activeControls:["trimEdgesCheckBox"]},
+					{name:"FXG 2.0", copyBehaviour:true, pixelDocSize:false, getOptions:getFxg2Options, saveFile:saveFxg, activeControls:["trimEdgesCheckBox"]}],
 
-	artboardSelect: [   {code:"all", name:'All artboards (except those beginning with - )'},
-						{code:"current", name:'Current artboard'},
+	artboardSelect: [   {code:"all", name:'All Artboards (except those beginning with - )'},
+						{code:"current", name:'Current Artboard'},
 						{name:'---'} ],
 
-	layerSelect: [  {code:"all", name:'All layers as individudal images (except those beginning with - )'},
-					{code:"none", name:'All visible layers as 1 combined image'},
-					{code:"selected", name:'Selected items\' layers'},
+	layerSelect: [  {code:"all", name:'All Layers (except those beginning with - )'},
+					{code:"none", name:'None (for use with \'Export Artboard Images\')'},
+					{code:"selected", name:'Selected Items\' Layers'},
 					{name:'---'} ],
 
 	init: function() {
@@ -220,8 +220,7 @@ var multi_exporter = {
 			saved_data.appendChild( new XML('<nyt_embedImage>true</nyt_embedImage>') );
 			saved_data.appendChild( new XML('<nyt_embedFont>true</nyt_embedFont>') );
 			saved_data.appendChild( new XML('<nyt_trimEdges>true</nyt_trimEdges>') );
-             saved_data.appendChild( new XML('<nyt_skipDefaultNames>true</nyt_skipDefaultNames>') );
-
+			saved_data.appendChild( new XML('<nyt_innerPadding>false</nyt_innerPadding>') );
 			saved_data.appendChild( new XML('<nyt_format>PNG 24</nyt_format>') );
 			saved_data.appendChild( new XML('<nyt_artboards>all</nyt_artboards>') );
 			saved_data.appendChild( new XML('<nyt_layers>all</nyt_layers>') );
@@ -242,21 +241,21 @@ var multi_exporter = {
 		} else {	 
 			
 			try {
-				this.prefs_xml		  = new XML( this.multiExporterPrefs.textFrames[0].contents );
-				this.prefix			 = this.prefs_xml.nyt_prefix;
-				this.suffix			 = this.prefs_xml.nyt_suffix;
-				this.base_path		  = this.prefs_xml.nyt_base_path;
+				this.prefs_xml		= new XML( this.multiExporterPrefs.textFrames[0].contents );
+				this.prefix			= this.prefs_xml.nyt_prefix;
+				this.suffix			= this.prefs_xml.nyt_suffix;
+				this.base_path		= this.prefs_xml.nyt_base_path;
 				this.scaling 		= this.prefs_xml.nyt_scaling;
-				this.transparency	   = this.prefs_xml.nyt_transparency == "true" ? true : false;
-				this.embedImage	   = this.prefs_xml.nyt_embedImage == "true" ? true : false;
-				this.ignoreWarnings	   = this.prefs_xml.nyt_ignoreWarnings == "true" ? true : false;
+				this.transparency	= this.prefs_xml.nyt_transparency == "true" ? true : false;
+				this.embedImage	    = this.prefs_xml.nyt_embedImage == "true" ? true : false;
+				this.ignoreWarnings = this.prefs_xml.nyt_ignoreWarnings == "true" ? true : false;
 				this.embedFont	    = this.prefs_xml.nyt_embedFont == "true" ? true : false;
 				this.trimEdges	    = this.prefs_xml.nyt_trimEdges == "true" ? true : false;
-             	this.skipDefaultNames = this.prefs_xml.nyt_skipDefaultNames == "true" ? true : false;
-
-				this.format			 = this.prefs_xml.nyt_format;
+				this.innerPadding   = this.prefs_xml.nyt_innerPadding == "true" ? true : false;
+				this.format		    = this.prefs_xml.nyt_format;
 				this.artboards		= this.prefs_xml.nyt_artboards.toString();
-				this.layers		= this.prefs_xml.nyt_layers.toString();
+				this.layers	        = this.prefs_xml.nyt_layers.toString();
+				this.whole_artboard_mode = this.prefs_xml.nyt_exportArtboards == "true" ? true : false;
 
 				if(!this.artboards){
 					this.artboards = this.artboardSelect[0].code;
@@ -313,6 +312,8 @@ var multi_exporter = {
 		this.artboardList = row.add('dropdownlist', undefined, artboardNames);
 		this.artboardList.selection = this.findDataIndex(this.artboards, this.artboardSelect);
 		
+		this.exportArtboardsCheckBox = row.add('checkbox', undefined, 'Export Artboard Images');
+		this.exportArtboardsCheckBox.value = this.whole_artboard_mode;
 
 		// LAYER TYPE ROW
 		
@@ -426,9 +427,9 @@ var multi_exporter = {
 		
 		this.trimEdgesCheckBox = row.add('checkbox', undefined, 'Trim Edges');
 		this.trimEdgesCheckBox.value = this.trimEdges;
-
-		this.skipDefaultNamesCheckBox = row.add('checkbox', undefined, 'Skip Default Names');
-		this.skipDefaultNamesCheckBox.value = this.skipDefaultNames;
+		
+		this.innerPaddingCheckBox = row.add('checkbox', undefined, 'Inner Padding (to prevent curved edge clipping)');
+		this.innerPaddingCheckBox.value = this.innerPadding;
 
 		// progress bar
 		var progBar = this.dlg.add( 'progressbar', undefined, 0, 100 );
@@ -475,12 +476,8 @@ var multi_exporter = {
 			multi_exporter.layers  = multi_exporter.getListData(multi_exporter.layerList.selection.index, multi_exporter.layerSelect);
 			multi_exporter.update_export_desc( );
 		};
-		this.skipDefaultNamesCheckBox.onClick = function() {
-
-                      multi_exporter.skipDefaultNames = this.value;          
-
-
-			multi_exporter.layers  = multi_exporter.getListData(multi_exporter.layerList.selection.index, multi_exporter.layerSelect);
+		this.exportArtboardsCheckBox.onClick = function() {
+			multi_exporter.whole_artboard_mode  = multi_exporter.exportArtboardsCheckBox.value;
 			multi_exporter.update_export_desc( );
 		};
 
@@ -543,12 +540,10 @@ var multi_exporter = {
 		this.export_artboards = []; 
 		this.export_layers = [];
 
-        this.whole_artboard_mode = false;
-
 		if(this.artboards=="all"){
 			for(var i=0; i<docRef.artboards.length; ++i){
 				var artboard = docRef.artboards[i];
-				if( this.isIncludeArtboard( artboard )){
+				if(!artboard.name.match( /^\-/ )){
 					this.export_artboards.push(i);
 				}
 			}
@@ -573,20 +568,14 @@ var multi_exporter = {
 				}
 			}
 			this.export_layers.push(docRef.artboards.getActiveArtboardIndex());
-         } else if ( this.layers=="none" ) {
-                this.whole_artboard_mode = true;
-             
 		}else if(typeof(this.layers)=="number"){
 			this.export_layers.push(this.layers);
 		}
 		this.updateExportCounts();
 	},
 	updateExportCounts: function(){
-        
 		this.num_to_export = this.export_artboards.length*this.export_layers.length;
-
-
-         var artboardExportTxt;
+		var artboardExportTxt;
 		if(this.whole_artboard_mode){
 			this.num_to_export += this.export_artboards.length;
 			if(this.export_layers.length){
@@ -624,8 +613,7 @@ var multi_exporter = {
 		this.embedImage = this.embedImageCheckBox.value; 
 		this.embedFont = this.embedFontCheckBox.value;
 		this.trimEdges = this.trimEdgesCheckBox.value;
-         this.skipDefaultNames = this.skipDefaultNamesCheckBox.value;
-
+		this.innerPadding = this.innerPaddingCheckBox.value;
 		this.ignoreWarnings = this.ignoreCheckBox.value;
 		this.format	   = this.formatList.selection.text;
 		this.scaling	  = parseFloat( this.scalingInput.text.replace( /\% /, '' ));
@@ -639,8 +627,7 @@ var multi_exporter = {
 		this.prefs_xml.nyt_ignoreWarnings = this.ignoreWarnings;
 		this.prefs_xml.nyt_embedFont = this.embedFont;
 		this.prefs_xml.nyt_trimEdges = this.trimEdges;
-         this.prefs_xml.nyt_skipDefaultNames = this.skipDefaultNames;
-
+		this.prefs_xml.nyt_innerPadding = this.innerPadding;
 		this.prefs_xml.nyt_format	   = this.format;
 		this.prefs_xml.nyt_artboards  = this.artboards;
 		this.prefs_xml.nyt_layers  = this.layers;
@@ -683,10 +670,10 @@ var multi_exporter = {
 		for (var i = 0; i < this.export_artboards.length; i++ ) {
 			var artboard = docRef.artboards[this.export_artboards[i]];
 			var artboardName = artboard.name;
-
 			starting_artboard = docRef.artboards.setActiveArtboardIndex(i);
 			
 			var rect = artboard.artboardRect;
+
 
 			var offsetX = firstRect[0]-rect[0];
 			var offsetY = firstRect[1]-rect[1];
@@ -703,15 +690,13 @@ var multi_exporter = {
 					var base_filename = this.base_path + "/" + this.prefix + artboardName + this.suffix;
 					if(copyBehaviour){
 						var offset = {x:offsetX, y:offsetY};
-						copyDoc = this.copyDocument(docRef, artboard, rect, artW, artH, offset, function(layer){return (layer.name!=multi_exporter.PREFS_LAYER_NAME && layer.visible)});
+						copyDoc = this.copyDocument(docRef, formatInfo.pixelDocSize, artboard, rect, artW, artH, offset, function(layer){return (layer.name!=multi_exporter.PREFS_LAYER_NAME && layer.visible)});
 						
 						formatInfo.saveFile(copyDoc, base_filename, options, i, artboardName);
 
 						copyDoc.close(SaveOptions.DONOTSAVECHANGES);
 						copyDoc = null;
 					}else{
-                                            $.writeln(base_filename);
-
 						formatInfo.saveFile(docRef, base_filename, options, i, artboardName);
 					}
 				}catch(e){
@@ -729,7 +714,7 @@ var multi_exporter = {
 					if(!this.trimEdges){
 						var layerDepths = [];
 						var offset = {x:offsetX, y:offsetY};
-						copyDoc = this.copyDocument(docRef, artboard, rect, docRef.width, docRef.height, offset, this.isAdditionalLayer, layerDepths);
+						copyDoc = this.copyDocument(docRef, formatInfo.pixelDocSize, artboard, rect, docRef.width, docRef.height, offset, this.isAdditionalLayer, layerDepths);
 						var hasAdditLayers = copyDoc.layers.length>0;
 					}
 				}else{
@@ -751,7 +736,7 @@ var multi_exporter = {
 
 							if(!hasAdditLayers && !isVis && !this.trimEdges){
 								// skip layers where nothing is visible
-								// continue;
+								continue;
 							}
 							var base_filename;
 							if ( this.export_artboards.length==1 ) {
@@ -792,7 +777,7 @@ var multi_exporter = {
 
 									offset = {x:offsetX+layerOffsetX, y:offsetY+layerOffsetY};
 									var layerDepths = [];
-									var copyDoc = this.copyDocument(docRef, artboard, rect, docW, docH, offset, this.isAdditionalLayer, layerDepths);
+									var copyDoc = this.copyDocument(docRef, formatInfo.pixelDocSize, artboard, rect, docW, docH, offset, this.isAdditionalLayer, layerDepths);
 								
 									var hasAdditLayers = copyDoc.layers.length>1; // there will be one empty layer in the new file (which can be ignored)
 
@@ -803,7 +788,7 @@ var multi_exporter = {
 								}
 								if(isVis){
 									// only copy layer if it is visible (if not only visible '+' layers will be output)
-									var new_layer = this.copy_layer(layer, copyDoc.layers.add(), offset);
+									var new_layer = this.copy_layer(layer, copyDoc.layers.add(), offset, copyDoc.width, copyDoc.height, this.innerPadding);
 									new_layer.visible = true;
 									var depth = layerDepths[this.export_layers[j]];
 									while(new_layer.zOrderPosition<depth){
@@ -820,7 +805,9 @@ var multi_exporter = {
 								}
 							}else{
 								layer.visible = true;
+
 								formatInfo.saveFile(docRef, base_filename, options, i, artboardName);
+
 								layer.visible = false;
 							}
 						}
@@ -893,25 +880,21 @@ var multi_exporter = {
 	isAdditionalLayer: function(layer) {
 		return ( layer.name.match( /^\+/ ) && layer.visible);
 	},
-
-    isIncludeArtboard: function(artboard) {
-        return( true );
-         if ( this.skipDefaultNames ) {
-            return ( !artboard.name.match( /^\-/) && !artboard.name.match( /^Artboard \d+/ ) );
-         } else { 
-            return ( !artboard.name.match( /^\-/) );
-         }            
-    },
 	
 	isIncludeLayer: function(layer) {
-         if ( this.skipDefaultNames ) {
-            return ( !layer.name.match( /^\+/ ) && layer.name!=this.PREFS_LAYER_NAME && !layer.name.match( /^\-/) && !layer.name.match( /^Layer \d+/ ) );
-         } else { 
-            return ( !layer.name.match( /^\+/ ) && layer.name!=this.PREFS_LAYER_NAME && !layer.name.match( /^\-/) );
-         }
+		return ( !layer.name.match( /^\+/ ) && layer.name!=this.PREFS_LAYER_NAME && !layer.name.match( /^\-/) )
 	},
 	
-	copyDocument: function(docRef, artboard, rect, w, h, offset, layerCheck, layerDepths) {
+	copyDocument: function(docRef, pixelDocSize, artboard, rect, w, h, offset, layerCheck, layerDepths) {
+		var docW;
+		var docH;
+		if(pixelDocSize){
+			w = Math.round(w *1000) / 1000;
+			h = Math.round(h *1000) / 1000;
+			w = Math.ceil(w);
+			h = Math.ceil(h);
+		}
+
 		var preset = new DocumentPreset();
 		preset.width = w;
 		preset.height = h;
@@ -930,7 +913,7 @@ var multi_exporter = {
 			if (layerCheck(layer)) {
 				var layerBounds = this.get_layer_bounds(layer);
 				if(layerBounds && this.intersects(rect, layerBounds)){
-					this.copy_layer(layer, copyDoc.layers.add(), offset);
+					this.copy_layer(layer, copyDoc.layers.add(), offset, w, h, false);
 					++count;
 				}
 			}else if(layerDepths){
@@ -946,7 +929,7 @@ var multi_exporter = {
 		this.dlg.update();
 	},
 	
-	copy_layer: function(from_layer, to_layer, offset) {
+	copy_layer: function(from_layer, to_layer, offset, docW, docH, doInnerPadding) {
 		to_layer.artworkKnockout = from_layer.artworkKnockout;
 		to_layer.blendingMode = from_layer.blendingMode;
 		to_layer.color = from_layer.color;
@@ -974,7 +957,7 @@ var multi_exporter = {
 		// copy backwards for correct z-ordering
 		for(var i=from_layer.layers.length-1; i>=0; --i){
 			var child = from_layer.layers[i];
-			if(child.visible)this.copy_layer(child, to_layer.layers.add(), offset)
+			if(child.visible)this.copy_layer(child, to_layer.layers.add(), offset, docW, docH, false)
 		}
 
 		if(!offset.norm){
@@ -1000,8 +983,33 @@ var multi_exporter = {
 				alert("shift layer failed");
 			}
 		}
+		if(doInnerPadding)this.innerPadLayer(to_layer, docW, docH);
 
 		return to_layer;
+	},
+
+	innerPadLayer: function(layer, docW, docH){
+		docW = Math.round(docW * 100) / 100;
+		docH = Math.round(docH * 100) / 100;
+		for(var i=0; i<layer.pageItems.length; ++i){
+			var item = layer.pageItems[i];
+			var bounds = item.visibleBounds;
+			// round to two decimal points
+			var l = Math.round(bounds[0] * 100) / 100;
+			var b = Math.round(bounds[1] * 100) / 100;
+			var r = Math.round(bounds[2] * 100) / 100;
+			var t = Math.round(bounds[3] * 100) / 100;
+			var w = (r - l);
+			var h = (b - t);
+			if(w>docW-1 && h>docH-1){
+				var scaleX = (w-1) / w * 100; // resize takes percentage values
+				var scaleY = (h-1) / h * 100;
+				item.resize(scaleX, scaleY, null, null, null, null, null, Transformation.CENTER);
+			}
+		}
+		for(var i=0; i<layer.layers.length; ++i){
+			innerPadLayer(layer.layers[i], docW, docH);
+		}
 	},
 	
 	rect_equal: function(rect1, rect2) {
@@ -1145,4 +1153,5 @@ var multi_exporter = {
 
 
 multi_exporter.init();
+
 
