@@ -7,7 +7,7 @@
 // Modified by Stephanie Walter to remove the _0001_ prefix
 
 /*
-@@@BUILDINFO@@@ Layer Comps To Files.jsx 1.0.0.24
+@@@BUILDINFO@@@ Layer comp artboards to file .jsx
 */
 
 /*
@@ -16,8 +16,8 @@
 
 <javascriptresource>
 <name>$$$/JavaScripts/LayerCompsToABFiles/Menu=Layer Comps to Artboard Files...</name>
-	<category>scriptexport</category>
-	<menu>export</menu>
+	<category>layercomps</category>
+    <enableinfo>true</enableinfo>
 	
 	<enableinfo>PSHOP_DocHasLayerComps</enableinfo>
 <eventid>cf34b502-2013-4d07-8431-1dfd634ee0cd</eventid>
